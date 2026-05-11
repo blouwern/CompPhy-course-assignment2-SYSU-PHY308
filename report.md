@@ -1,23 +1,28 @@
 # MCMC 二维积分上机报告
 王志超 23343062
+<br>
 2026/5/7
-  - [实践平台说明](#实践平台说明)
-  - [实践内容介绍](#实践内容介绍)
-  - [分析思考](#分析思考)
-  - [程序使用方法](#程序使用方法)
-  - [程序运行结果](#程序运行结果)
-  - [补充说明](#补充说明)
-  - [源码附录](#源码附录)
-    - [C++ Sampler (src/mcmc\_integral.cpp)](#c-sampler-srcmcmc_integralcpp)
-    - [Python Analysis (analysis/analyze\_mcmc.py)](#python-analysis-analysisanalyze_mcmcpy)
-    - [Build Script (Makefile)](#build-script-makefile)
+
+**目录**
+
+- [实践平台说明](#实践平台说明)
+- [实践内容介绍](#实践内容介绍)
+- [分析思考](#分析思考)
+- [程序使用方法](#程序使用方法)
+- [程序运行结果](#程序运行结果)
+- [补充说明](#补充说明)
+- [源码附录](#源码附录)
+  - [C++ Sampler (src/mcmc\_integral.cpp)](#c-sampler-srcmcmc_integralcpp)
+  - [Python Analysis (analysis/analyze\_mcmc.py)](#python-analysis-analysisanalyze_mcmcpy)
+  - [Build Script (Makefile)](#build-script-makefile)
 
 ## 实践平台说明
 - OS: Linux
 - Compiler: g++ (std=C++17)
-- Python environment: 3.13.5 (virtual)
+- Python environment: 3.13.5
 
 **本地配置详情：**
+
 - Release: Debian GNU/Linux 13 (trixie)
 - Kernel: 6.12.86+deb13-amd64
 - CPU: Intel(R) Core(TM) Ultra 5 125H, 18 threads
@@ -40,17 +45,27 @@ $$
 其中归一化的概率密度函数为 $p_1 = q_1 / Z_1$ 且 $p_2 = q_2 / Z_2$，$Z_1$ 和 $Z_2$ 分别为积分域上的归一化常数。
 
 ## 分析思考
-1) **分布密度函数归一化在有限区间做还是无穷区间做？对计算结果是否有差别？**
-- 在要计算的有限区间上做归一化
+
+**1. 分布密度函数归一化在有限区间做还是无穷区间做？对计算结果是否有差别？**
+
+- 在要计算的有限区间上做归一化：
+
   - 如果密度函数在全平面（无穷区间）上进行归一化，其归一化常数将不同于题目所给区域的真实常数。在受限的有限域上使用 MH 采样时（对边界外的提议予以拒绝），其采得的样本正是该有限区间上的目标分布；
+
   - 当求最终的期望值来估算积分时，必须乘以该有限积分区间的分布归一化常数，使用无穷区间的常数的话结果将产生显著偏差，导致计算错误。
+
 - 理论上，在无穷平面上归一化常数分别为 $Z_2 = \pi$ 且 $Z_1 = 2\pi/\sqrt{3}$。而在本题的有限积分域中，实际上数值积分求得 $Z_1 \approx 1.76$、$Z_2 \approx 1.50$，两者差异巨大。
 
-1) **如何做 Markov 链游走？**
-- 利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal distribution)
-  - 使用标准差 $\sigma$ 来控制游走步长
-  - 每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如 $y \le 2+x$ 且 $x \in [-2, 2]$）
-  - 如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态
+**2. 如何做 Markov 链游走？**
+
+- 利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal distribution)：
+
+  - 使用标准差 $\sigma$ 来控制游走步长；
+
+  - 每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如 $y \le 2+x$ 且 $x \in [-2, 2]$）；
+
+  - 如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态。
+
 - 这里为了保证蒙特卡洛积分的效率，需要通过测试选取一组合适的游走步长 $\sigma$。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。
 
 ## 程序使用方法
