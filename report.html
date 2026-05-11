@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>report.html&lt;mcmcIntegral2D&gt;</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+
+</head>
+
+<body>
+
+<h1 id="mcmc-二维积分上机报告">MCMC 二维积分上机报告</h1>
+<p>王志超 23343062 2026/5/7 - <a href="#实践平台说明">实践平台说明</a> -
+<a href="#实践内容介绍">实践内容介绍</a> - <a
+href="#分析思考">分析思考</a> - <a href="#程序使用方法">程序使用方法</a>
+- <a href="#程序运行结果">程序运行结果</a> - <a
+href="#补充说明">补充说明</a> - <a href="#源码附录">源码附录</a> - <a
+href="#c-sampler-srcmcmc_integralcpp">C++ Sampler
+(src/mcmc_integral.cpp)</a> - <a
+href="#python-analysis-analysisanalyze_mcmcpy">Python Analysis
+(analysis/analyze_mcmc.py)</a> - <a href="#build-script-makefile">Build
+Script (Makefile)</a></p>
+<h2 id="实践平台说明">实践平台说明</h2>
+<ul>
+<li>OS: Linux</li>
+<li>Compiler: g++ (std=C++17)</li>
+<li>Python environment: 3.13.5 (virtual)</li>
+</ul>
+<p><strong>本地配置详情：</strong> - Release: Debian GNU/Linux 13
+(trixie) - Kernel: 6.12.86+deb13-amd64 - CPU: Intel(R) Core(TM) Ultra 5
+125H, 18 threads - Memory: 30 GiB RAM, 23 GiB Swap - Python packages:
+numpy 2.4.4, matplotlib 3.10.9</p>
+<h2 id="实践内容介绍">实践内容介绍</h2>
+<p>利用 Metropolis-Hastings (MH) 算法上机编程计算如下二维积分：</p>
+<p><span
+class="math display"><em>I</em> = ∫<sub>−2</sub><sup>2</sup><em>d</em><em>x</em>∫<sub>0</sub><sup>2 + <em>x</em></sup><em>d</em><em>y</em> (2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup></span></p>
+<p>分别利用如下两个重要性抽样分布的概率密度函数：</p>
+<p><span
+class="math display"><em>q</em><sub>1</sub>(<em>x</em>, <em>y</em>) = <em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup>,  <em>q</em><sub>2</sub>(<em>x</em>, <em>y</em>) = <em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup></sup>.</span></p>
+<p>其中归一化的概率密度函数为 <span
+class="math inline"><em>p</em><sub>1</sub> = <em>q</em><sub>1</sub>/<em>Z</em><sub>1</sub></span>
+且 <span
+class="math inline"><em>p</em><sub>2</sub> = <em>q</em><sub>2</sub>/<em>Z</em><sub>2</sub></span>，<span
+class="math inline"><em>Z</em><sub>1</sub></span> 和 <span
+class="math inline"><em>Z</em><sub>2</sub></span>
+分别为积分域上的归一化常数。</p>
+<h2 id="分析思考">分析思考</h2>
+<ol type="1">
+<li><strong>分布密度函数归一化在有限区间做还是无穷区间做？对计算结果是否有差别？</strong></li>
+</ol>
+<ul>
+<li>在要计算的有限区间上做归一化
+<ul>
+<li>如果密度函数在全平面（无穷区间）上进行归一化，其归一化常数将不同于题目所给区域的真实常数。在受限的有限域上使用
+MH
+采样时（对边界外的提议予以拒绝），其采得的样本正是该有限区间上的目标分布；</li>
+<li>当求最终的期望值来估算积分时，必须乘以该有限积分区间的分布归一化常数，使用无穷区间的常数的话结果将产生显著偏差，导致计算错误。</li>
+</ul></li>
+<li>理论上，在无穷平面上归一化常数分别为 <span
+class="math inline"><em>Z</em><sub>2</sub> = <em>π</em></span> 且 <span
+class="math inline">$Z_1 =
+2\pi/\sqrt{3}$</span>。而在本题的有限积分域中，实际上数值积分求得 <span
+class="math inline"><em>Z</em><sub>1</sub> ≈ 1.76</span>、<span
+class="math inline"><em>Z</em><sub>2</sub> ≈ 1.50</span>，两者差异巨大。</li>
+</ul>
+<ol type="1">
+<li><strong>如何做 Markov 链游走？</strong></li>
+</ol>
+<ul>
+<li>利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal
+distribution)
+<ul>
+<li>使用标准差 <span class="math inline"><em>σ</em></span>
+来控制游走步长</li>
+<li>每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如
+<span class="math inline"><em>y</em> ≤ 2 + <em>x</em></span> 且 <span
+class="math inline"><em>x</em> ∈ [−2, 2]</span>）</li>
+<li>如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态</li>
+</ul></li>
+<li>这里为了保证蒙特卡洛积分的效率，需要通过测试选取一组合适的游走步长
+<span
+class="math inline"><em>σ</em></span>。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。</li>
+</ul>
+<h2 id="程序使用方法">程序使用方法</h2>
+<p><strong>1. 编译构建程序：</strong></p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">make</span></span></code></pre></div>
+<p><strong>2. 逐个运行单条马尔可夫链，例如 <span
+class="math inline"><em>p</em><sub>1</sub></span> 分布、游走步长<span
+class="math inline"><em>σ</em> = 0.6</span></strong></p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./mcmc_integral</span> <span class="at">--density</span> p1 <span class="at">--samples</span> 20000 <span class="at">--burn</span> 5000 <span class="at">--thin</span> 1 <span class="at">--step</span> 0.6 <span class="at">--output</span> data/p1_step0.6.csv</span></code></pre></div>
+<p><strong>3. 数据分析及可视化作图：</strong></p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> analysis/analyze_mcmc.py data/<span class="pp">*</span>.csv <span class="at">--out-dir</span> figures</span></code></pre></div>
+<h2 id="程序运行结果">程序运行结果</h2>
+<p><strong>有限区间上的分布函数归一化（采用 <span
+class="math inline">200 × 200</span> 网格的辛普森 / Simpson
+积分法计算）：</strong></p>
+<p><span
+class="math display"><em>Z</em><sub>1</sub> = 1.76485582,  <em>Z</em><sub>2</sub> = 1.49646379</span></p>
+<p><strong>步长测试扫描（每次采样：20,000 个保留样本，5,000 步为老化期 /
+Burn-in）：</strong></p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">密度函数</th>
+<th style="text-align: center;">游走步长 (<span
+class="math inline"><em>σ</em></span>)</th>
+<th style="text-align: center;">接受率</th>
+<th style="text-align: center;">积分估计值</th>
+<th style="text-align: center;">积分自相关时间 (<span
+class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub></span>)</th>
+<th style="text-align: center;">建议抽样间隔 (<span
+class="math inline"><em>N</em><sub>0</sub></span>)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>1</sub></span></td>
+<td style="text-align: center;">0.3</td>
+<td style="text-align: center;">0.691</td>
+<td style="text-align: center;">5.6577</td>
+<td style="text-align: center;">34.417</td>
+<td style="text-align: center;">69</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>1</sub></span></td>
+<td style="text-align: center;">0.6</td>
+<td style="text-align: center;">0.472</td>
+<td style="text-align: center;">5.5962</td>
+<td style="text-align: center;">12.270</td>
+<td style="text-align: center;">25</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>1</sub></span></td>
+<td style="text-align: center;">0.9</td>
+<td style="text-align: center;">0.321</td>
+<td style="text-align: center;">5.6882</td>
+<td style="text-align: center;">14.742</td>
+<td style="text-align: center;">30</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>1</sub></span></td>
+<td style="text-align: center;">1.2</td>
+<td style="text-align: center;">0.228</td>
+<td style="text-align: center;">5.6429</td>
+<td style="text-align: center;">11.622</td>
+<td style="text-align: center;">24</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>2</sub></span></td>
+<td style="text-align: center;">0.3</td>
+<td style="text-align: center;">0.672</td>
+<td style="text-align: center;">5.6553</td>
+<td style="text-align: center;">19.235</td>
+<td style="text-align: center;">39</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>2</sub></span></td>
+<td style="text-align: center;">0.6</td>
+<td style="text-align: center;">0.434</td>
+<td style="text-align: center;">5.5004</td>
+<td style="text-align: center;">7.885</td>
+<td style="text-align: center;">16</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>2</sub></span></td>
+<td style="text-align: center;">0.9</td>
+<td style="text-align: center;">0.288</td>
+<td style="text-align: center;">5.7362</td>
+<td style="text-align: center;">5.589</td>
+<td style="text-align: center;">12</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span
+class="math inline"><em>p</em><sub>2</sub></span></td>
+<td style="text-align: center;">1.2</td>
+<td style="text-align: center;">0.201</td>
+<td style="text-align: center;">5.5333</td>
+<td style="text-align: center;">11.107</td>
+<td style="text-align: center;">23</td>
+</tr>
+</tbody>
+</table>
+<p><strong>各密度函数的最佳配置与分析：</strong> - 对于 <span
+class="math inline"><em>p</em><sub>1</sub></span>：推荐游走步长为 <span
+class="math inline"><em>σ</em> ≈ 0.6</span>，此时具备合理的接受率（<span
+class="math inline">47.2%</span>），且对应的自相关时间 <span
+class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 12.27</span>
+较小，样本能较快趋于独立。根据 <span
+class="math inline"><em>N</em><sub>0</sub> ≥ 2<em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub></span>
+的经验公式，建议的间隔取点应设为 <span
+class="math inline"><em>N</em><sub>0</sub> = 25</span>。 - 对于 <span
+class="math inline"><em>p</em><sub>2</sub></span>：推荐游走步长为 <span
+class="math inline"><em>σ</em> ≈ 0.9</span>，在扫描测试中表现出最小的自相关时间（<span
+class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 5.59</span>）。依同理，对于该密度函数此时的建议抽样间隔为
+<span class="math inline"><em>N</em><sub>0</sub> = 12</span>。</p>
+<p>由此，可以通过每隔 <span
+class="math inline"><em>N</em><sub>0</sub></span>
+步提取一次样本以获取趋近于独立同分布 (i.i.d) 的有效采样。</p>
+<p>部分自相关函数 (ACF) 与抽样序列 (Trace) 的可视化结果展示如下。</p>
+<p><strong>基于密度 <span
+class="math inline"><em>p</em><sub>1</sub></span> (游走步长 <span
+class="math inline"><em>σ</em> = 0.6</span>)：</strong> 在使用 <span
+class="math inline"><em>σ</em> = 0.6</span> 的高斯游走步长时，Trace
+图显示马尔可夫链能够很好地探索样本空间，没有出现长时间的滞留现象；同时
+ACF 图表明自相关函数在间隔 20 步左右便快速衰减至 0
+附近，说明样本间的相关性较低，采样效率良好。</p>
+<div data-align="center">
+<p><img src="figures/trace_p1_step0.6.png" alt="Trace p1 step 0.6" />
+<br> <em>图 1：密度 <span
+class="math inline"><em>p</em><sub>1</sub></span>（步长 <span
+class="math inline"><em>σ</em> = 0.6</span>）前 2000 步采样的 Trace
+图，可以看到抽样序列呈现平稳的混合过程。（横坐标：采样步数
+Sample，纵坐标：有效观测量 Observable）</em></p>
+</div>
+<div data-align="center">
+<p><img src="figures/acf_p1_step0.6.png" alt="ACF p1 step 0.6" /> <br>
+<em>图 2：密度 <span
+class="math inline"><em>p</em><sub>1</sub></span>（步长 <span
+class="math inline"><em>σ</em> = 0.6</span>）的自相关函数 (ACF)
+衰减图，可以看到相关性随延迟步数呈快速下降。（横坐标：延迟步数
+Lag，纵坐标：自相关系数 ACF）</em></p>
+</div>
+<p><br></p>
+<p><strong>基于密度 <span
+class="math inline"><em>p</em><sub>2</sub></span> (游走步长 <span
+class="math inline"><em>σ</em> = 0.9</span>)：</strong> 对于密度 <span
+class="math inline"><em>p</em><sub>2</sub></span>，步长 <span
+class="math inline"><em>σ</em> = 0.9</span>
+表现出最优的自相关时间（<span
+class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 5.6</span>）。从
+Trace 图可以看出序列在均值附近高频振荡且混合充分；对应的 ACF
+图极快地衰减到接近 0 的水平，代表了非常理想的独立同分布 (i.i.d)
+近似。</p>
+<div data-align="center">
+<p><img src="figures/trace_p2_step0.9.png" alt="Trace p2 step 0.9" />
+<br> <em>图 3：密度 <span
+class="math inline"><em>p</em><sub>2</sub></span>（步长 <span
+class="math inline"><em>σ</em> = 0.9</span>）前 2000 步采样的 Trace
+图，链波动均匀且收敛快。（横坐标：采样步数 Sample，纵坐标：有效观测量
+Observable）</em></p>
+</div>
+<div data-align="center">
+<p><img src="figures/acf_p2_step0.9.png" alt="ACF p2 step 0.9" /> <br>
+<em>图 4：密度 <span
+class="math inline"><em>p</em><sub>2</sub></span>（步长 <span
+class="math inline"><em>σ</em> = 0.9</span>）的自相关函数 (ACF)
+衰减图，可见 ACF 在 10 步以内基本降至零。（横坐标：延迟步数
+Lag，纵坐标：自相关系数 ACF）</em></p>
+</div>
+<h2 id="补充说明">补充说明</h2>
+<p>根据重要性采样 (Importance Sampling) 的基本原理，对于待求积分 <span
+class="math inline"><em>I</em> = ∫<em>f</em>(<em>x</em>, <em>y</em>)<em>d</em><em>x</em><em>d</em><em>y</em></span>，当我们引入符合某种已知分布的概率密度函数
+<span class="math inline"><em>p</em>(<em>x</em>, <em>y</em>)</span>
+时，积分类式的期望值可等价改写为：</p>
+<p><span class="math display">$$
+I = \int \frac{f(x,y)}{p(x,y)} p(x,y) dx dy = \mathbb{E}_{p}\left[
+\frac{f(x,y)}{p(x,y)} \right]
+$$</span></p>
+<p>通过马尔可夫链蒙特卡洛 (MCMC) 方法从 <span
+class="math inline"><em>p</em>(<em>x</em>, <em>y</em>)</span>
+中抽取一系列样本点 <span
+class="math inline">(<em>x</em><sub><em>i</em></sub>, <em>y</em><sub><em>i</em></sub>)</span>
+时，积分值即可通过下式进行蒙特卡洛估计：</p>
+<p><span class="math display">$$
+I \approx \frac{1}{N} \sum_{i=1}^N \frac{f(x_i, y_i)}{p(x_i, y_i)}
+$$</span></p>
+<p>而在本题情图下，被积函数的核心部分 <span
+class="math inline"><em>f</em>(<em>x</em>, <em>y</em>) = (2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup></span>。</p>
+<p><strong>1. 基于密度 <span
+class="math inline"><em>p</em><sub>1</sub></span> 的抽样估算：</strong>
+已知概率密度函数 <span class="math inline">$p_1(x,y) = \frac{1}{Z_1}
+e^{-x^2 - y^2 + xy}$</span>。代入上述原理公式中，每次采样的有效观测量
+<span
+class="math inline"><em>O</em><sub>1</sub>(<em>x</em>, <em>y</em>)</span>
+为：</p>
+<p><span class="math display">$$
+\frac{f(x,y)}{p_1(x,y)} = \frac{(2 + x^2 + y^2) e^{-x^2 - y^2 +
+xy}}{\frac{1}{Z_1} e^{-x^2 - y^2 + xy}} = Z_1 (2 + x^2 + y^2)
+$$</span></p>
+<p>因此最终的估计等式提炼为：<span
+class="math inline"><em>I</em> = <em>Z</em><sub>1</sub>⟨2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>⟩<sub><em>p</em><sub>1</sub></sub></span>。</p>
+<p><strong>2. 基于密度 <span
+class="math inline"><em>p</em><sub>2</sub></span> 的抽样估算：</strong>
+同理，针对密度函数 <span class="math inline">$p_2(x,y) = \frac{1}{Z_2}
+e^{-x^2 - y^2}$</span> 进行变换，对应的有效观测量 <span
+class="math inline"><em>O</em><sub>2</sub>(<em>x</em>, <em>y</em>)</span>
+为：</p>
+<p><span class="math display">$$
+\frac{f(x,y)}{p_2(x,y)} = \frac{(2 + x^2 + y^2) e^{-x^2 - y^2 +
+xy}}{\frac{1}{Z_2} e^{-x^2 - y^2}} = Z_2 (2 + x^2 + y^2) e^{xy}
+$$</span></p>
+<p>所以得到最终估计等式为：<span
+class="math inline"><em>I</em> = <em>Z</em><sub>2</sub>⟨(2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup><em>x</em><em>y</em></sup>⟩<sub><em>p</em><sub>2</sub></sub></span>。</p>
+<h2 id="源码附录">源码附录</h2>
+<h3 id="c-sampler-srcmcmc_integral.cpp">C++ Sampler
+(src/mcmc_integral.cpp)</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cmath&gt;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstdint&gt;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;fstream&gt;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iomanip&gt;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;random&gt;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;sstream&gt;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string&gt;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;vector&gt;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Options <span class="op">{</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string density <span class="op">=</span> <span class="st">&quot;p1&quot;</span><span class="op">;</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> samples <span class="op">=</span> <span class="dv">20000</span><span class="op">;</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> burn_in <span class="op">=</span> <span class="dv">5000</span><span class="op">;</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> thin <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> step <span class="op">=</span> <span class="fl">0.6</span><span class="op">;</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint64_t</span> seed <span class="op">=</span> <span class="dv">12345</span><span class="op">;</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> grid_nx <span class="op">=</span> <span class="dv">200</span><span class="op">;</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> grid_ny <span class="op">=</span> <span class="dv">200</span><span class="op">;</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string output <span class="op">=</span> <span class="st">&quot;&quot;</span><span class="op">;</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> in_domain<span class="op">(</span><span class="dt">double</span> x<span class="op">,</span> <span class="dt">double</span> y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">&lt;</span> <span class="op">-</span><span class="fl">2.0</span> <span class="op">||</span> x <span class="op">&gt;</span> <span class="fl">2.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>y <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> ymax <span class="op">=</span> <span class="fl">2.0</span> <span class="op">+</span> x<span class="op">;</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> y <span class="op">&lt;=</span> ymax<span class="op">;</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> log_q1<span class="op">(</span><span class="dt">double</span> x<span class="op">,</span> <span class="dt">double</span> y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-(</span>x <span class="op">*</span> x<span class="op">)</span> <span class="op">-</span> <span class="op">(</span>y <span class="op">*</span> y<span class="op">)</span> <span class="op">+</span> x <span class="op">*</span> y<span class="op">;</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> log_q2<span class="op">(</span><span class="dt">double</span> x<span class="op">,</span> <span class="dt">double</span> y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-(</span>x <span class="op">*</span> x<span class="op">)</span> <span class="op">-</span> <span class="op">(</span>y <span class="op">*</span> y<span class="op">);</span></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> simpson_1d<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> <span class="op">&amp;</span>values<span class="op">,</span> <span class="dt">double</span> h<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>values<span class="op">.</span>size<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> sum <span class="op">=</span> values<span class="op">.</span>front<span class="op">()</span> <span class="op">+</span> values<span class="op">.</span>back<span class="op">();</span></span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">size_t</span> i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> values<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>        sum <span class="op">+=</span> <span class="op">(</span>i <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">?</span> <span class="fl">2.0</span> <span class="op">*</span> values<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">4.0</span> <span class="op">*</span> values<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sum <span class="op">*</span> h <span class="op">/</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> integrate_2d_simpson<span class="op">(</span><span class="dt">int</span> nx<span class="op">,</span> <span class="dt">int</span> ny<span class="op">,</span> <span class="at">const</span> <span class="bu">std::</span>string <span class="op">&amp;</span>density<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>nx <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>        nx <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>ny <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>        ny <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> x_min <span class="op">=</span> <span class="op">-</span><span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> x_max <span class="op">=</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> hx <span class="op">=</span> <span class="op">(</span>x_max <span class="op">-</span> x_min<span class="op">)</span> <span class="op">/</span> nx<span class="op">;</span></span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> x_values<span class="op">(</span>nx <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;=</span> nx<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a>        x_values<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> x_min <span class="op">+</span> i <span class="op">*</span> hx<span class="op">;</span></span>
+<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> fx<span class="op">(</span>nx <span class="op">+</span> <span class="dv">1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;=</span> nx<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> x <span class="op">=</span> x_values<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> y_min <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> y_max <span class="op">=</span> <span class="fl">2.0</span> <span class="op">+</span> x<span class="op">;</span></span>
+<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>y_max <span class="op">&lt;=</span> y_min<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a>            fx<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> hy <span class="op">=</span> <span class="op">(</span>y_max <span class="op">-</span> y_min<span class="op">)</span> <span class="op">/</span> ny<span class="op">;</span></span>
+<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> y_vals<span class="op">(</span>ny <span class="op">+</span> <span class="dv">1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;=</span> ny<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> y <span class="op">=</span> y_min <span class="op">+</span> j <span class="op">*</span> hy<span class="op">;</span></span>
+<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> val <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>density <span class="op">==</span> <span class="st">&quot;p1&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a>                val <span class="op">=</span> <span class="bu">std::</span>exp<span class="op">(</span>log_q1<span class="op">(</span>x<span class="op">,</span> y<span class="op">));</span></span>
+<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a>                val <span class="op">=</span> <span class="bu">std::</span>exp<span class="op">(</span>log_q2<span class="op">(</span>x<span class="op">,</span> y<span class="op">));</span></span>
+<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a>            y_vals<span class="op">[</span>j<span class="op">]</span> <span class="op">=</span> val<span class="op">;</span></span>
+<span id="cb4-88"><a href="#cb4-88" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-89"><a href="#cb4-89" aria-hidden="true" tabindex="-1"></a>        fx<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> simpson_1d<span class="op">(</span>y_vals<span class="op">,</span> hy<span class="op">);</span></span>
+<span id="cb4-90"><a href="#cb4-90" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-91"><a href="#cb4-91" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> simpson_1d<span class="op">(</span>fx<span class="op">,</span> hx<span class="op">);</span></span>
+<span id="cb4-92"><a href="#cb4-92" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-93"><a href="#cb4-93" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-94"><a href="#cb4-94" aria-hidden="true" tabindex="-1"></a>Options parse_args<span class="op">(</span><span class="dt">int</span> argc<span class="op">,</span> <span class="dt">char</span> <span class="op">**</span>argv<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-95"><a href="#cb4-95" aria-hidden="true" tabindex="-1"></a>    Options opts<span class="op">;</span></span>
+<span id="cb4-96"><a href="#cb4-96" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> argc<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-97"><a href="#cb4-97" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>string arg <span class="op">=</span> argv<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb4-98"><a href="#cb4-98" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> next <span class="op">=</span> <span class="op">[&amp;](</span><span class="dt">double</span> <span class="op">&amp;</span>target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-99"><a href="#cb4-99" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> argc<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-100"><a href="#cb4-100" aria-hidden="true" tabindex="-1"></a>                target <span class="op">=</span> <span class="bu">std::</span>stod<span class="op">(</span>argv<span class="op">[++</span>i<span class="op">]);</span></span>
+<span id="cb4-101"><a href="#cb4-101" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-102"><a href="#cb4-102" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb4-103"><a href="#cb4-103" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> next_int <span class="op">=</span> <span class="op">[&amp;](</span><span class="dt">int64_t</span> <span class="op">&amp;</span>target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-104"><a href="#cb4-104" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> argc<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-105"><a href="#cb4-105" aria-hidden="true" tabindex="-1"></a>                target <span class="op">=</span> <span class="bu">std::</span>stoll<span class="op">(</span>argv<span class="op">[++</span>i<span class="op">]);</span></span>
+<span id="cb4-106"><a href="#cb4-106" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-107"><a href="#cb4-107" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb4-108"><a href="#cb4-108" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> next_uint <span class="op">=</span> <span class="op">[&amp;](</span><span class="dt">uint64_t</span> <span class="op">&amp;</span>target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-109"><a href="#cb4-109" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> argc<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-110"><a href="#cb4-110" aria-hidden="true" tabindex="-1"></a>                target <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">uint64_t</span><span class="op">&gt;(</span><span class="bu">std::</span>stoull<span class="op">(</span>argv<span class="op">[++</span>i<span class="op">]));</span></span>
+<span id="cb4-111"><a href="#cb4-111" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-112"><a href="#cb4-112" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb4-113"><a href="#cb4-113" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> next_str <span class="op">=</span> <span class="op">[&amp;](</span><span class="bu">std::</span>string <span class="op">&amp;</span>target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-114"><a href="#cb4-114" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> argc<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-115"><a href="#cb4-115" aria-hidden="true" tabindex="-1"></a>                target <span class="op">=</span> argv<span class="op">[++</span>i<span class="op">];</span></span>
+<span id="cb4-116"><a href="#cb4-116" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-117"><a href="#cb4-117" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb4-118"><a href="#cb4-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-119"><a href="#cb4-119" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--density&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-120"><a href="#cb4-120" aria-hidden="true" tabindex="-1"></a>            next_str<span class="op">(</span>opts<span class="op">.</span>density<span class="op">);</span></span>
+<span id="cb4-121"><a href="#cb4-121" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--samples&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-122"><a href="#cb4-122" aria-hidden="true" tabindex="-1"></a>            next_int<span class="op">(</span>opts<span class="op">.</span>samples<span class="op">);</span></span>
+<span id="cb4-123"><a href="#cb4-123" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--burn&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-124"><a href="#cb4-124" aria-hidden="true" tabindex="-1"></a>            next_int<span class="op">(</span>opts<span class="op">.</span>burn_in<span class="op">);</span></span>
+<span id="cb4-125"><a href="#cb4-125" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--thin&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-126"><a href="#cb4-126" aria-hidden="true" tabindex="-1"></a>            next_int<span class="op">(</span>opts<span class="op">.</span>thin<span class="op">);</span></span>
+<span id="cb4-127"><a href="#cb4-127" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--step&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-128"><a href="#cb4-128" aria-hidden="true" tabindex="-1"></a>            next<span class="op">(</span>opts<span class="op">.</span>step<span class="op">);</span></span>
+<span id="cb4-129"><a href="#cb4-129" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--seed&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-130"><a href="#cb4-130" aria-hidden="true" tabindex="-1"></a>            next_uint<span class="op">(</span>opts<span class="op">.</span>seed<span class="op">);</span></span>
+<span id="cb4-131"><a href="#cb4-131" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--grid-nx&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-132"><a href="#cb4-132" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int64_t</span> tmp <span class="op">=</span> opts<span class="op">.</span>grid_nx<span class="op">;</span></span>
+<span id="cb4-133"><a href="#cb4-133" aria-hidden="true" tabindex="-1"></a>            next_int<span class="op">(</span>tmp<span class="op">);</span></span>
+<span id="cb4-134"><a href="#cb4-134" aria-hidden="true" tabindex="-1"></a>            opts<span class="op">.</span>grid_nx <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>tmp<span class="op">);</span></span>
+<span id="cb4-135"><a href="#cb4-135" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--grid-ny&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-136"><a href="#cb4-136" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int64_t</span> tmp <span class="op">=</span> opts<span class="op">.</span>grid_ny<span class="op">;</span></span>
+<span id="cb4-137"><a href="#cb4-137" aria-hidden="true" tabindex="-1"></a>            next_int<span class="op">(</span>tmp<span class="op">);</span></span>
+<span id="cb4-138"><a href="#cb4-138" aria-hidden="true" tabindex="-1"></a>            opts<span class="op">.</span>grid_ny <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>tmp<span class="op">);</span></span>
+<span id="cb4-139"><a href="#cb4-139" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>arg <span class="op">==</span> <span class="st">&quot;--output&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-140"><a href="#cb4-140" aria-hidden="true" tabindex="-1"></a>            next_str<span class="op">(</span>opts<span class="op">.</span>output<span class="op">);</span></span>
+<span id="cb4-141"><a href="#cb4-141" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-142"><a href="#cb4-142" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-143"><a href="#cb4-143" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> opts<span class="op">;</span></span>
+<span id="cb4-144"><a href="#cb4-144" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-145"><a href="#cb4-145" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-146"><a href="#cb4-146" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">(</span><span class="dt">int</span> argc<span class="op">,</span> <span class="dt">char</span> <span class="op">**</span>argv<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-147"><a href="#cb4-147" aria-hidden="true" tabindex="-1"></a>    Options opts <span class="op">=</span> parse_args<span class="op">(</span>argc<span class="op">,</span> argv<span class="op">);</span></span>
+<span id="cb4-148"><a href="#cb4-148" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>opts<span class="op">.</span>density <span class="op">!=</span> <span class="st">&quot;p1&quot;</span> <span class="op">&amp;&amp;</span> opts<span class="op">.</span>density <span class="op">!=</span> <span class="st">&quot;p2&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-149"><a href="#cb4-149" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cerr <span class="op">&lt;&lt;</span> <span class="st">&quot;Unknown density: &quot;</span> <span class="op">&lt;&lt;</span> opts<span class="op">.</span>density <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-150"><a href="#cb4-150" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-151"><a href="#cb4-151" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-152"><a href="#cb4-152" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-153"><a href="#cb4-153" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>opts<span class="op">.</span>samples <span class="op">&lt;=</span> <span class="dv">0</span> <span class="op">||</span> opts<span class="op">.</span>burn_in <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> opts<span class="op">.</span>thin <span class="op">&lt;=</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-154"><a href="#cb4-154" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cerr <span class="op">&lt;&lt;</span> <span class="st">&quot;Invalid sampling parameters.</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-155"><a href="#cb4-155" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-156"><a href="#cb4-156" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-157"><a href="#cb4-157" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-158"><a href="#cb4-158" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> z_norm <span class="op">=</span> integrate_2d_simpson<span class="op">(</span>opts<span class="op">.</span>grid_nx<span class="op">,</span> opts<span class="op">.</span>grid_ny<span class="op">,</span> opts<span class="op">.</span>density<span class="op">);</span></span>
+<span id="cb4-159"><a href="#cb4-159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-160"><a href="#cb4-160" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>mt19937_64 rng<span class="op">(</span>opts<span class="op">.</span>seed<span class="op">);</span></span>
+<span id="cb4-161"><a href="#cb4-161" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>normal_distribution<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> normal<span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-162"><a href="#cb4-162" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>uniform_real_distribution<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> uniform<span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-163"><a href="#cb4-163" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-164"><a href="#cb4-164" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> x <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-165"><a href="#cb4-165" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> y <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb4-166"><a href="#cb4-166" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>in_domain<span class="op">(</span>x<span class="op">,</span> y<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-167"><a href="#cb4-167" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-168"><a href="#cb4-168" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-169"><a href="#cb4-169" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-170"><a href="#cb4-170" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-171"><a href="#cb4-171" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> log_q <span class="op">=</span> <span class="op">[&amp;](</span><span class="dt">double</span> x_val<span class="op">,</span> <span class="dt">double</span> y_val<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-172"><a href="#cb4-172" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">(</span>opts<span class="op">.</span>density <span class="op">==</span> <span class="st">&quot;p1&quot;</span><span class="op">)</span> <span class="op">?</span> log_q1<span class="op">(</span>x_val<span class="op">,</span> y_val<span class="op">)</span> <span class="op">:</span> log_q2<span class="op">(</span>x_val<span class="op">,</span> y_val<span class="op">);</span></span>
+<span id="cb4-173"><a href="#cb4-173" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb4-174"><a href="#cb4-174" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-175"><a href="#cb4-175" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> total_steps <span class="op">=</span> opts<span class="op">.</span>burn_in <span class="op">+</span> opts<span class="op">.</span>samples <span class="op">*</span> opts<span class="op">.</span>thin<span class="op">;</span></span>
+<span id="cb4-176"><a href="#cb4-176" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> accepted <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-177"><a href="#cb4-177" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int64_t</span> kept <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-178"><a href="#cb4-178" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-179"><a href="#cb4-179" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>ofstream out<span class="op">;</span></span>
+<span id="cb4-180"><a href="#cb4-180" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>opts<span class="op">.</span>output<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb4-181"><a href="#cb4-181" aria-hidden="true" tabindex="-1"></a>        out<span class="op">.</span>open<span class="op">(</span>opts<span class="op">.</span>output<span class="op">);</span></span>
+<span id="cb4-182"><a href="#cb4-182" aria-hidden="true" tabindex="-1"></a>        out <span class="op">&lt;&lt;</span> <span class="st">&quot;idx,x,y,observable</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-183"><a href="#cb4-183" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-184"><a href="#cb4-184" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-185"><a href="#cb4-185" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> mean <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-186"><a href="#cb4-186" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> m2 <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-187"><a href="#cb4-187" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-188"><a href="#cb4-188" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int64_t</span> step_idx <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> step_idx <span class="op">&lt;</span> total_steps<span class="op">;</span> <span class="op">++</span>step_idx<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-189"><a href="#cb4-189" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> x_prop <span class="op">=</span> x <span class="op">+</span> opts<span class="op">.</span>step <span class="op">*</span> normal<span class="op">(</span>rng<span class="op">);</span></span>
+<span id="cb4-190"><a href="#cb4-190" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> y_prop <span class="op">=</span> y <span class="op">+</span> opts<span class="op">.</span>step <span class="op">*</span> normal<span class="op">(</span>rng<span class="op">);</span></span>
+<span id="cb4-191"><a href="#cb4-191" aria-hidden="true" tabindex="-1"></a>        <span class="dt">bool</span> accept <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb4-192"><a href="#cb4-192" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>in_domain<span class="op">(</span>x_prop<span class="op">,</span> y_prop<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-193"><a href="#cb4-193" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> log_alpha <span class="op">=</span> log_q<span class="op">(</span>x_prop<span class="op">,</span> y_prop<span class="op">)</span> <span class="op">-</span> log_q<span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span></span>
+<span id="cb4-194"><a href="#cb4-194" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span><span class="bu">std::</span>log<span class="op">(</span>uniform<span class="op">(</span>rng<span class="op">))</span> <span class="op">&lt;</span> log_alpha<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-195"><a href="#cb4-195" aria-hidden="true" tabindex="-1"></a>                accept <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb4-196"><a href="#cb4-196" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-197"><a href="#cb4-197" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-198"><a href="#cb4-198" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>accept<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-199"><a href="#cb4-199" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> x_prop<span class="op">;</span></span>
+<span id="cb4-200"><a href="#cb4-200" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y_prop<span class="op">;</span></span>
+<span id="cb4-201"><a href="#cb4-201" aria-hidden="true" tabindex="-1"></a>            accepted<span class="op">++;</span></span>
+<span id="cb4-202"><a href="#cb4-202" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-203"><a href="#cb4-203" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-204"><a href="#cb4-204" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>step_idx <span class="op">&gt;=</span> opts<span class="op">.</span>burn_in <span class="op">&amp;&amp;</span> <span class="op">((</span>step_idx <span class="op">-</span> opts<span class="op">.</span>burn_in<span class="op">)</span> <span class="op">%</span> opts<span class="op">.</span>thin <span class="op">==</span> <span class="dv">0</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-205"><a href="#cb4-205" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> h <span class="op">=</span> <span class="fl">2.0</span> <span class="op">+</span> x <span class="op">*</span> x <span class="op">+</span> y <span class="op">*</span> y<span class="op">;</span></span>
+<span id="cb4-206"><a href="#cb4-206" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> observable <span class="op">=</span> h<span class="op">;</span></span>
+<span id="cb4-207"><a href="#cb4-207" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>opts<span class="op">.</span>density <span class="op">==</span> <span class="st">&quot;p2&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-208"><a href="#cb4-208" aria-hidden="true" tabindex="-1"></a>                observable <span class="op">=</span> h <span class="op">*</span> <span class="bu">std::</span>exp<span class="op">(</span>x <span class="op">*</span> y<span class="op">);</span></span>
+<span id="cb4-209"><a href="#cb4-209" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-210"><a href="#cb4-210" aria-hidden="true" tabindex="-1"></a>            kept<span class="op">++;</span></span>
+<span id="cb4-211"><a href="#cb4-211" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> delta <span class="op">=</span> observable <span class="op">-</span> mean<span class="op">;</span></span>
+<span id="cb4-212"><a href="#cb4-212" aria-hidden="true" tabindex="-1"></a>            mean <span class="op">+=</span> delta <span class="op">/</span> kept<span class="op">;</span></span>
+<span id="cb4-213"><a href="#cb4-213" aria-hidden="true" tabindex="-1"></a>            m2 <span class="op">+=</span> delta <span class="op">*</span> <span class="op">(</span>observable <span class="op">-</span> mean<span class="op">);</span></span>
+<span id="cb4-214"><a href="#cb4-214" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-215"><a href="#cb4-215" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>out<span class="op">.</span>is_open<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb4-216"><a href="#cb4-216" aria-hidden="true" tabindex="-1"></a>                out <span class="op">&lt;&lt;</span> kept <span class="op">&lt;&lt;</span> <span class="st">&quot;,&quot;</span> <span class="op">&lt;&lt;</span> <span class="bu">std::</span>setprecision<span class="op">(</span><span class="dv">10</span><span class="op">)</span> <span class="op">&lt;&lt;</span> x <span class="op">&lt;&lt;</span> <span class="st">&quot;,&quot;</span> <span class="op">&lt;&lt;</span> y <span class="op">&lt;&lt;</span> <span class="st">&quot;,&quot;</span> <span class="op">&lt;&lt;</span> observable <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-217"><a href="#cb4-217" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-218"><a href="#cb4-218" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-219"><a href="#cb4-219" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-220"><a href="#cb4-220" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-221"><a href="#cb4-221" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> variance <span class="op">=</span> <span class="op">(</span>kept <span class="op">&gt;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">?</span> <span class="op">(</span>m2 <span class="op">/</span> <span class="op">(</span>kept <span class="op">-</span> <span class="dv">1</span><span class="op">))</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-222"><a href="#cb4-222" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> stddev <span class="op">=</span> <span class="bu">std::</span>sqrt<span class="op">(</span>variance<span class="op">);</span></span>
+<span id="cb4-223"><a href="#cb4-223" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> estimate <span class="op">=</span> z_norm <span class="op">*</span> mean<span class="op">;</span></span>
+<span id="cb4-224"><a href="#cb4-224" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> stderr <span class="op">=</span> <span class="op">(</span>kept <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">?</span> z_norm <span class="op">*</span> stddev <span class="op">/</span> <span class="bu">std::</span>sqrt<span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>kept<span class="op">))</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-225"><a href="#cb4-225" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-226"><a href="#cb4-226" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="bu">std::</span>fixed <span class="op">&lt;&lt;</span> <span class="bu">std::</span>setprecision<span class="op">(</span><span class="dv">8</span><span class="op">);</span></span>
+<span id="cb4-227"><a href="#cb4-227" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Density: &quot;</span> <span class="op">&lt;&lt;</span> opts<span class="op">.</span>density <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-228"><a href="#cb4-228" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Z_norm: &quot;</span> <span class="op">&lt;&lt;</span> z_norm <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-229"><a href="#cb4-229" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Samples kept: &quot;</span> <span class="op">&lt;&lt;</span> kept <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-230"><a href="#cb4-230" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Acceptance rate: &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>accepted<span class="op">)</span> <span class="op">/</span> total_steps <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-231"><a href="#cb4-231" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Mean observable: &quot;</span> <span class="op">&lt;&lt;</span> mean <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-232"><a href="#cb4-232" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Integral estimate: &quot;</span> <span class="op">&lt;&lt;</span> estimate <span class="op">&lt;&lt;</span> <span class="st">&quot; +/- &quot;</span> <span class="op">&lt;&lt;</span> stderr <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb4-233"><a href="#cb4-233" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-234"><a href="#cb4-234" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-235"><a href="#cb4-235" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="python-analysis-analysisanalyze_mcmc.py">Python Analysis
+(analysis/analyze_mcmc.py)</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> argparse</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> csv</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> math</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> List, Tuple</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> load_observable(path: <span class="bu">str</span>) <span class="op">-&gt;</span> np.ndarray:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> []</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">&quot;r&quot;</span>, newline<span class="op">=</span><span class="st">&quot;&quot;</span>) <span class="im">as</span> handle:</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        reader <span class="op">=</span> csv.DictReader(handle)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> row <span class="kw">in</span> reader:</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>            values.append(<span class="bu">float</span>(row[<span class="st">&quot;observable&quot;</span>]))</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.asarray(values, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> autocorrelation(x: np.ndarray, max_lag: <span class="bu">int</span>) <span class="op">-&gt;</span> np.ndarray:</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> x <span class="op">-</span> np.mean(x)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">len</span>(x)</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.zeros(<span class="dv">1</span>)</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    var <span class="op">=</span> np.var(x)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> var <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.zeros(max_lag <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    acf <span class="op">=</span> np.zeros(max_lag <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    acf[<span class="dv">0</span>] <span class="op">=</span> <span class="fl">1.0</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> lag <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, max_lag <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>        acf[lag] <span class="op">=</span> np.dot(x[:<span class="op">-</span>lag], x[lag:]) <span class="op">/</span> ((n <span class="op">-</span> lag) <span class="op">*</span> var)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> acf</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> integrated_autocorr_time(acf: np.ndarray) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">len</span>(acf) <span class="op">&lt;=</span> <span class="dv">1</span>:</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">1.0</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    tau <span class="op">=</span> <span class="fl">1.0</span></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> lag <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="bu">len</span>(acf)):</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> acf[lag] <span class="op">&lt;=</span> <span class="fl">0.0</span>:</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>        tau <span class="op">+=</span> <span class="fl">2.0</span> <span class="op">*</span> acf[lag]</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> tau</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> analyze_file(path: <span class="bu">str</span>, max_lag: <span class="bu">int</span>, out_dir: <span class="bu">str</span>) <span class="op">-&gt;</span> Tuple[<span class="bu">float</span>, <span class="bu">int</span>]:</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    series <span class="op">=</span> load_observable(path)</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">len</span>(series) <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">1.0</span>, <span class="dv">1</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>    max_lag <span class="op">=</span> <span class="bu">min</span>(max_lag, <span class="bu">len</span>(series) <span class="op">-</span> <span class="dv">1</span>)</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    acf <span class="op">=</span> autocorrelation(series, max_lag)</span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    tau <span class="op">=</span> integrated_autocorr_time(acf)</span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>    thin <span class="op">=</span> <span class="bu">max</span>(<span class="dv">1</span>, <span class="bu">int</span>(math.ceil(<span class="fl">2.0</span> <span class="op">*</span> tau)))</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>    base <span class="op">=</span> os.path.splitext(os.path.basename(path))[<span class="dv">0</span>]</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>    plt.figure(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">3</span>))</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>    plt.plot(series[: <span class="bu">min</span>(<span class="dv">2000</span>, <span class="bu">len</span>(series))], lw<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>    plt.title(<span class="ss">f&quot;Trace: </span><span class="sc">{</span>base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>    plt.xlabel(<span class="st">&quot;Sample&quot;</span>)</span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>    plt.ylabel(<span class="st">&quot;Observable&quot;</span>)</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>    plt.tight_layout()</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>    plt.savefig(os.path.join(out_dir, <span class="ss">f&quot;trace_</span><span class="sc">{</span>base<span class="sc">}</span><span class="ss">.png&quot;</span>), dpi<span class="op">=</span><span class="dv">150</span>)</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>    plt.close()</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>    plt.figure(figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">3</span>))</span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>    plt.plot(acf, lw<span class="op">=</span><span class="fl">1.0</span>)</span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>    plt.title(<span class="ss">f&quot;ACF: </span><span class="sc">{</span>base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>    plt.xlabel(<span class="st">&quot;Lag&quot;</span>)</span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>    plt.ylabel(<span class="st">&quot;ACF&quot;</span>)</span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>    plt.tight_layout()</span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>    plt.savefig(os.path.join(out_dir, <span class="ss">f&quot;acf_</span><span class="sc">{</span>base<span class="sc">}</span><span class="ss">.png&quot;</span>), dpi<span class="op">=</span><span class="dv">150</span>)</span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>    plt.close()</span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> tau, thin</span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> main() <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>    parser <span class="op">=</span> argparse.ArgumentParser()</span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>    parser.add_argument(<span class="st">&quot;inputs&quot;</span>, nargs<span class="op">=</span><span class="st">&quot;+&quot;</span>, <span class="bu">help</span><span class="op">=</span><span class="st">&quot;CSV files from the sampler&quot;</span>)</span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>    parser.add_argument(<span class="st">&quot;--max-lag&quot;</span>, <span class="bu">type</span><span class="op">=</span><span class="bu">int</span>, default<span class="op">=</span><span class="dv">2000</span>)</span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>    parser.add_argument(<span class="st">&quot;--out-dir&quot;</span>, default<span class="op">=</span><span class="st">&quot;figures&quot;</span>)</span>
+<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>    args <span class="op">=</span> parser.parse_args()</span>
+<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a>    os.makedirs(args.out_dir, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a>    rows: List[Tuple[<span class="bu">str</span>, <span class="bu">float</span>, <span class="bu">int</span>]] <span class="op">=</span> []</span>
+<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> path <span class="kw">in</span> args.inputs:</span>
+<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>        tau, thin <span class="op">=</span> analyze_file(path, args.max_lag, args.out_dir)</span>
+<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a>        rows.append((path, tau, thin))</span>
+<span id="cb5-91"><a href="#cb5-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-92"><a href="#cb5-92" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;file,tau_int,thin&quot;</span>)</span>
+<span id="cb5-93"><a href="#cb5-93" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> path, tau, thin <span class="kw">in</span> rows:</span>
+<span id="cb5-94"><a href="#cb5-94" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>path<span class="sc">}</span><span class="ss">,</span><span class="sc">{</span>tau<span class="sc">:.3f}</span><span class="ss">,</span><span class="sc">{</span>thin<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb5-95"><a href="#cb5-95" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-96"><a href="#cb5-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-97"><a href="#cb5-97" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:</span>
+<span id="cb5-98"><a href="#cb5-98" aria-hidden="true" tabindex="-1"></a>    main()</span></code></pre></div>
+<h3 id="build-script-makefile">Build Script (Makefile)</h3>
+<pre class="make"><code>CXX = g++
+CXXFLAGS = -O2 -std=c++17 -Wall -Wextra -pedantic
+
+BIN = mcmc_integral
+SRC = src/mcmc_integral.cpp
+
+all: $(BIN)
+
+$(BIN): $(SRC)
+    $(CXX) $(CXXFLAGS) -o $(BIN) $(SRC)
+
+clean:
+    rm -f $(BIN)</code></pre>
+
+</body>
+</html>
