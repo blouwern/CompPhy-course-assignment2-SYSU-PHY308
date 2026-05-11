@@ -13,26 +13,38 @@
 <body>
 
 <h1 id="mcmc-二维积分上机报告">MCMC 二维积分上机报告</h1>
-<p>王志超 23343062 2026/5/7 - <a href="#实践平台说明">实践平台说明</a> -
-<a href="#实践内容介绍">实践内容介绍</a> - <a
-href="#分析思考">分析思考</a> - <a href="#程序使用方法">程序使用方法</a>
-- <a href="#程序运行结果">程序运行结果</a> - <a
-href="#补充说明">补充说明</a> - <a href="#源码附录">源码附录</a> - <a
-href="#c-sampler-srcmcmc_integralcpp">C++ Sampler
-(src/mcmc_integral.cpp)</a> - <a
-href="#python-analysis-analysisanalyze_mcmcpy">Python Analysis
-(analysis/analyze_mcmc.py)</a> - <a href="#build-script-makefile">Build
-Script (Makefile)</a></p>
+<p>王志超 23343062 <br> 2026/5/7</p>
+<p><strong>目录</strong></p>
+<ul>
+<li><a href="#实践平台说明">实践平台说明</a></li>
+<li><a href="#实践内容介绍">实践内容介绍</a></li>
+<li><a href="#分析思考">分析思考</a></li>
+<li><a href="#程序使用方法">程序使用方法</a></li>
+<li><a href="#程序运行结果">程序运行结果</a></li>
+<li><a href="#补充说明">补充说明</a></li>
+<li><a href="#源码附录">源码附录</a>
+<ul>
+<li><a href="#c-sampler-srcmcmc_integralcpp">C++ Sampler
+(src/mcmc_integral.cpp)</a></li>
+<li><a href="#python-analysis-analysisanalyze_mcmcpy">Python Analysis
+(analysis/analyze_mcmc.py)</a></li>
+<li><a href="#build-script-makefile">Build Script (Makefile)</a></li>
+</ul></li>
+</ul>
 <h2 id="实践平台说明">实践平台说明</h2>
 <ul>
 <li>OS: Linux</li>
 <li>Compiler: g++ (std=C++17)</li>
-<li>Python environment: 3.13.5 (virtual)</li>
+<li>Python environment: 3.13.5</li>
 </ul>
-<p><strong>本地配置详情：</strong> - Release: Debian GNU/Linux 13
-(trixie) - Kernel: 6.12.86+deb13-amd64 - CPU: Intel(R) Core(TM) Ultra 5
-125H, 18 threads - Memory: 30 GiB RAM, 23 GiB Swap - Python packages:
-numpy 2.4.4, matplotlib 3.10.9</p>
+<p><strong>本地配置详情：</strong></p>
+<ul>
+<li>Release: Debian GNU/Linux 13 (trixie)</li>
+<li>Kernel: 6.12.86+deb13-amd64</li>
+<li>CPU: Intel(R) Core(TM) Ultra 5 125H, 18 threads</li>
+<li>Memory: 30 GiB RAM, 23 GiB Swap</li>
+<li>Python packages: numpy 2.4.4, matplotlib 3.10.9</li>
+</ul>
 <h2 id="实践内容介绍">实践内容介绍</h2>
 <p>利用 Metropolis-Hastings (MH) 算法上机编程计算如下二维积分：</p>
 <p><span
@@ -48,41 +60,38 @@ class="math inline"><em>Z</em><sub>1</sub></span> 和 <span
 class="math inline"><em>Z</em><sub>2</sub></span>
 分别为积分域上的归一化常数。</p>
 <h2 id="分析思考">分析思考</h2>
-<ol type="1">
-<li><strong>分布密度函数归一化在有限区间做还是无穷区间做？对计算结果是否有差别？</strong></li>
-</ol>
+<p><strong>1.
+分布密度函数归一化在有限区间做还是无穷区间做？对计算结果是否有差别？</strong></p>
 <ul>
-<li>在要计算的有限区间上做归一化
+<li><p>在要计算的有限区间上做归一化：</p>
 <ul>
-<li>如果密度函数在全平面（无穷区间）上进行归一化，其归一化常数将不同于题目所给区域的真实常数。在受限的有限域上使用
+<li><p>如果密度函数在全平面（无穷区间）上进行归一化，其归一化常数将不同于题目所给区域的真实常数。在受限的有限域上使用
 MH
-采样时（对边界外的提议予以拒绝），其采得的样本正是该有限区间上的目标分布；</li>
-<li>当求最终的期望值来估算积分时，必须乘以该有限积分区间的分布归一化常数，使用无穷区间的常数的话结果将产生显著偏差，导致计算错误。</li>
+采样时（对边界外的提议予以拒绝），其采得的样本正是该有限区间上的目标分布；</p></li>
+<li><p>当求最终的期望值来估算积分时，必须乘以该有限积分区间的分布归一化常数，使用无穷区间的常数的话结果将产生显著偏差，导致计算错误。</p></li>
 </ul></li>
-<li>理论上，在无穷平面上归一化常数分别为 <span
+<li><p>理论上，在无穷平面上归一化常数分别为 <span
 class="math inline"><em>Z</em><sub>2</sub> = <em>π</em></span> 且 <span
 class="math inline">$Z_1 =
 2\pi/\sqrt{3}$</span>。而在本题的有限积分域中，实际上数值积分求得 <span
 class="math inline"><em>Z</em><sub>1</sub> ≈ 1.76</span>、<span
-class="math inline"><em>Z</em><sub>2</sub> ≈ 1.50</span>，两者差异巨大。</li>
+class="math inline"><em>Z</em><sub>2</sub> ≈ 1.50</span>，两者差异巨大。</p></li>
 </ul>
-<ol type="1">
-<li><strong>如何做 Markov 链游走？</strong></li>
-</ol>
+<p><strong>2. 如何做 Markov 链游走？</strong></p>
 <ul>
-<li>利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal
-distribution)
+<li><p>利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal
+distribution)：</p>
 <ul>
-<li>使用标准差 <span class="math inline"><em>σ</em></span>
-来控制游走步长</li>
-<li>每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如
+<li><p>使用标准差 <span class="math inline"><em>σ</em></span>
+来控制游走步长；</p></li>
+<li><p>每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如
 <span class="math inline"><em>y</em> ≤ 2 + <em>x</em></span> 且 <span
-class="math inline"><em>x</em> ∈ [−2, 2]</span>）</li>
-<li>如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态</li>
+class="math inline"><em>x</em> ∈ [−2, 2]</span>）；</p></li>
+<li><p>如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态。</p></li>
 </ul></li>
-<li>这里为了保证蒙特卡洛积分的效率，需要通过测试选取一组合适的游走步长
+<li><p>这里为了保证蒙特卡洛积分的效率，需要通过测试选取一组合适的游走步长
 <span
-class="math inline"><em>σ</em></span>。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。</li>
+class="math inline"><em>σ</em></span>。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。</p></li>
 </ul>
 <h2 id="程序使用方法">程序使用方法</h2>
 <p><strong>1. 编译构建程序：</strong></p>
