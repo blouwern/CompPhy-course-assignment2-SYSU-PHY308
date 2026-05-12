@@ -288,16 +288,16 @@ function groupContent(node) {
 <h2 id="实践内容介绍">实践内容介绍</h2>
 <p>利用 Metropolis-Hastings (MH) 算法上机编程计算如下二维积分：</p>
 <p><span
-class="math display"><em>I</em> = ∫<sub>−2</sub><sup>2</sup><em>d</em><em>x</em>∫<sub>0</sub><sup>2 + <em>x</em></sup><em>d</em><em>y</em> (2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup></span></p>
+class="math display">I = \int_{-2}^{2} dx \int_{0}^{2+x} dy\,(2 + x^2 + y^2) e^{-x^2 - y^2 + xy}</span></p>
 <p>分别利用如下两个重要性抽样分布的概率密度函数：</p>
 <p><span
-class="math display"><em>q</em><sub>1</sub>(<em>x</em>, <em>y</em>) = <em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup>,  <em>q</em><sub>2</sub>(<em>x</em>, <em>y</em>) = <em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup></sup>.</span></p>
+class="math display">q_1(x,y) = e^{-x^2 - y^2 + xy}, \quad q_2(x,y) = e^{-x^2 - y^2}.</span></p>
 <p>其中归一化的概率密度函数为 <span
-class="math inline"><em>p</em><sub>1</sub> = <em>q</em><sub>1</sub>/<em>Z</em><sub>1</sub></span>
+class="math inline">p_1 = q_1 / Z_1</span>
 且 <span
-class="math inline"><em>p</em><sub>2</sub> = <em>q</em><sub>2</sub>/<em>Z</em><sub>2</sub></span>，<span
-class="math inline"><em>Z</em><sub>1</sub></span> 和 <span
-class="math inline"><em>Z</em><sub>2</sub></span>
+class="math inline">p_2 = q_2 / Z_2</span>，<span
+class="math inline">Z_1</span> 和 <span
+class="math inline">Z_2</span>
 分别为积分域上的归一化常数。</p>
 <h2 id="分析思考">分析思考</h2>
 <p><strong>1.
@@ -311,35 +311,34 @@ MH
 <li><p>当求最终的期望值来估算积分时，必须乘以该有限积分区间的分布归一化常数，使用无穷区间的常数的话结果将产生显著偏差，导致计算错误。</p></li>
 </ul></li>
 <li><p>理论上，在无穷平面上归一化常数分别为 <span
-class="math inline"><em>Z</em><sub>2</sub> = <em>π</em></span> 且 <span
-class="math inline">$Z_1 =
-2\pi/\sqrt{3}$</span>。而在本题的有限积分域中，实际上数值积分求得 <span
-class="math inline"><em>Z</em><sub>1</sub> ≈ 1.76</span>、<span
-class="math inline"><em>Z</em><sub>2</sub> ≈ 1.50</span>，两者差异巨大。</p></li>
+class="math inline">Z_2 = \pi</span> 且 <span
+class="math inline">Z_1 = 2\pi/\sqrt{3}</span>。而在本题的有限积分域中，实际上数值积分求得 <span
+class="math inline">Z_1 \approx 1.76</span>、<span
+class="math inline">Z_2 \approx 1.50</span>，两者差异巨大。</p></li>
 </ul>
 <p><strong>2. 如何做 Markov 链游走？</strong></p>
 <ul>
 <li><p>利用高斯随机游走 (Gaussian random-walk) 作为提议分布 (Proposal
 distribution)：</p>
 <ul>
-<li><p>使用标准差 <span class="math inline"><em>σ</em></span>
+<li><p>使用标准差 <span class="math inline">\sigma</span>
 来控制游走步长；</p></li>
 <li><p>每步提议出新坐标点，先检查候选点是否落在给定的二维定义域界限内（如
-<span class="math inline"><em>y</em> ≤ 2 + <em>x</em></span> 且 <span
-class="math inline"><em>x</em> ∈ [−2, 2]</span>）；</p></li>
+<span class="math inline">y \le 2+x</span> 且 <span
+class="math inline">x \in [-2, 2]</span>）；</p></li>
 <li><p>如果落在区域以外，则在接受率判定时被直接等价于概率为0从而拒绝，马尔可夫链停留在前一状态。</p></li>
 </ul></li>
 <li><p>这里为了保证蒙特卡洛积分的效率，需要通过测试选取一组合适的游走步长
 <span
-class="math inline"><em>σ</em></span>。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。</p></li>
+class="math inline">\sigma</span>。合理的步长能够在“保证一定的接受率避免状态陷入局部停滞”与“减小样本间的自相关性以加快收敛”二者之间取得平衡。</p></li>
 </ul>
 <h2 id="程序使用方法">程序使用方法</h2>
 <p><strong>1. 编译构建程序：</strong></p>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">make</span></span></code></pre></div>
 <p><strong>2. 逐个运行单条马尔可夫链，例如 <span
-class="math inline"><em>p</em><sub>1</sub></span> 分布、游走步长<span
-class="math inline"><em>σ</em> = 0.6</span></strong></p>
+class="math inline">p_1</span> 分布、游走步长<span
+class="math inline">\sigma=0.6</span></strong></p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./mcmc_integral</span> <span class="at">--density</span> p1 <span class="at">--samples</span> 20000 <span class="at">--burn</span> 5000 <span class="at">--thin</span> 1 <span class="at">--step</span> 0.6 <span class="at">--output</span> data/p1_step0.6.csv</span></code></pre></div>
 <p><strong>3. 数据分析及可视化作图：</strong></p>
@@ -347,10 +346,10 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> analysis/analyze_mcmc.py data/<span class="pp">*</span>.csv <span class="at">--out-dir</span> figures</span></code></pre></div>
 <h2 id="程序运行结果">程序运行结果</h2>
 <p><strong>有限区间上的分布函数归一化（采用 <span
-class="math inline">200 × 200</span> 网格的辛普森 / Simpson
+class="math inline">200 \times 200</span> 网格的辛普森 / Simpson
 积分法计算）：</strong></p>
 <p><span
-class="math display"><em>Z</em><sub>1</sub> = 1.76485582,  <em>Z</em><sub>2</sub> = 1.49646379</span></p>
+class="math display">Z_1 = 1.76485582, \quad Z_2 = 1.49646379</span></p>
 <p><strong>步长测试扫描（每次采样：20,000 个保留样本，5,000 步为老化期 /
 Burn-in）：</strong></p>
 <table style="width:100%;">
@@ -366,19 +365,19 @@ Burn-in）：</strong></p>
 <tr class="header">
 <th style="text-align: center;">密度函数</th>
 <th style="text-align: center;">游走步长 (<span
-class="math inline"><em>σ</em></span>)</th>
+class="math inline">\sigma</span>)</th>
 <th style="text-align: center;">接受率</th>
 <th style="text-align: center;">积分估计值</th>
 <th style="text-align: center;">积分自相关时间 (<span
-class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub></span>)</th>
+class="math inline">\tau_{int}</span>)</th>
 <th style="text-align: center;">建议抽样间隔 (<span
-class="math inline"><em>N</em><sub>0</sub></span>)</th>
+class="math inline">N_0</span>)</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>1</sub></span></td>
+class="math inline">p_1</span></td>
 <td style="text-align: center;">0.3</td>
 <td style="text-align: center;">0.691</td>
 <td style="text-align: center;">5.6577</td>
@@ -387,7 +386,7 @@ class="math inline"><em>p</em><sub>1</sub></span></td>
 </tr>
 <tr class="even">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>1</sub></span></td>
+class="math inline">p_1</span></td>
 <td style="text-align: center;">0.6</td>
 <td style="text-align: center;">0.472</td>
 <td style="text-align: center;">5.5962</td>
@@ -396,7 +395,7 @@ class="math inline"><em>p</em><sub>1</sub></span></td>
 </tr>
 <tr class="odd">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>1</sub></span></td>
+class="math inline">p_1</span></td>
 <td style="text-align: center;">0.9</td>
 <td style="text-align: center;">0.321</td>
 <td style="text-align: center;">5.6882</td>
@@ -405,7 +404,7 @@ class="math inline"><em>p</em><sub>1</sub></span></td>
 </tr>
 <tr class="even">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>1</sub></span></td>
+class="math inline">p_1</span></td>
 <td style="text-align: center;">1.2</td>
 <td style="text-align: center;">0.228</td>
 <td style="text-align: center;">5.6429</td>
@@ -414,7 +413,7 @@ class="math inline"><em>p</em><sub>1</sub></span></td>
 </tr>
 <tr class="odd">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>2</sub></span></td>
+class="math inline">p_2</span></td>
 <td style="text-align: center;">0.3</td>
 <td style="text-align: center;">0.672</td>
 <td style="text-align: center;">5.6553</td>
@@ -423,7 +422,7 @@ class="math inline"><em>p</em><sub>2</sub></span></td>
 </tr>
 <tr class="even">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>2</sub></span></td>
+class="math inline">p_2</span></td>
 <td style="text-align: center;">0.6</td>
 <td style="text-align: center;">0.434</td>
 <td style="text-align: center;">5.5004</td>
@@ -432,7 +431,7 @@ class="math inline"><em>p</em><sub>2</sub></span></td>
 </tr>
 <tr class="odd">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>2</sub></span></td>
+class="math inline">p_2</span></td>
 <td style="text-align: center;">0.9</td>
 <td style="text-align: center;">0.288</td>
 <td style="text-align: center;">5.7362</td>
@@ -441,7 +440,7 @@ class="math inline"><em>p</em><sub>2</sub></span></td>
 </tr>
 <tr class="even">
 <td style="text-align: center;"><span
-class="math inline"><em>p</em><sub>2</sub></span></td>
+class="math inline">p_2</span></td>
 <td style="text-align: center;">1.2</td>
 <td style="text-align: center;">0.201</td>
 <td style="text-align: center;">5.5333</td>
@@ -453,118 +452,118 @@ class="math inline"><em>p</em><sub>2</sub></span></td>
 <p><strong>各密度函数的最佳配置与分析：</strong></p>
 <ul>
 <li>对于 <span
-class="math inline"><em>p</em><sub>1</sub></span>：推荐游走步长为 <span
-class="math inline"><em>σ</em> ≈ 0.6</span>，此时具备合理的接受率（<span
-class="math inline">47.2%</span>），且对应的自相关时间 <span
-class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 12.27</span>
+class="math inline">p_1</span>：推荐游走步长为 <span
+class="math inline">\sigma \approx 0.6</span>，此时具备合理的接受率（<span
+class="math inline">47.2\%</span>），且对应的自相关时间 <span
+class="math inline">\tau_{int} \approx 12.27</span>
 较小，样本能较快趋于独立。根据 <span
-class="math inline"><em>N</em><sub>0</sub> ≥ 2<em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub></span>
+class="math inline">N_0 \ge 2\tau_{int}</span>
 的经验公式，建议的间隔取点应设为 <span
-class="math inline"><em>N</em><sub>0</sub> = 25</span>。</li>
+class="math inline">N_0 = 25</span>。</li>
 <li>对于 <span
-class="math inline"><em>p</em><sub>2</sub></span>：推荐游走步长为 <span
-class="math inline"><em>σ</em> ≈ 0.9</span>，在扫描测试中表现出最小的自相关时间（<span
-class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 5.59</span>）。依同理，对于该密度函数此时的建议抽样间隔为
-<span class="math inline"><em>N</em><sub>0</sub> = 12</span>。</li>
+class="math inline">p_2</span>：推荐游走步长为 <span
+class="math inline">\sigma \approx 0.9</span>，在扫描测试中表现出最小的自相关时间（<span
+class="math inline">\tau_{int} \approx 5.59</span>）。依同理，对于该密度函数此时的建议抽样间隔为
+<span class="math inline">N_0 = 12</span>。</li>
 </ul>
 <p>由此，可以通过每隔 <span
-class="math inline"><em>N</em><sub>0</sub></span>
+class="math inline">N_0</span>
 步提取一次样本以获取趋近于独立同分布 (i.i.d) 的有效采样。</p>
 <p>部分自相关函数 (ACF) 与抽样序列 (Trace) 的可视化结果展示如下。</p>
 <p><strong>基于密度 <span
-class="math inline"><em>p</em><sub>1</sub></span> (游走步长 <span
-class="math inline"><em>σ</em> = 0.6</span>)：</strong> 在使用 <span
-class="math inline"><em>σ</em> = 0.6</span> 的高斯游走步长时，Trace
+class="math inline">p_1</span> (游走步长 <span
+class="math inline">\sigma=0.6</span>)：</strong> 在使用 <span
+class="math inline">\sigma=0.6</span> 的高斯游走步长时，Trace
 图显示马尔可夫链能够很好地探索样本空间，没有出现长时间的滞留现象；同时
 ACF 图表明自相关函数在间隔 20 步左右便快速衰减至 0
 附近，说明样本间的相关性较低，采样效率良好。</p>
 <div data-align="center">
 <p><img src="figures/trace_p1_step0.6.png" alt="Trace p1 step 0.6" />
 <br> <em>图 1：密度 <span
-class="math inline"><em>p</em><sub>1</sub></span>（步长 <span
-class="math inline"><em>σ</em> = 0.6</span>）前 2000 步采样的 Trace
+class="math inline">p_1</span>（步长 <span
+class="math inline">\sigma=0.6</span>）前 2000 步采样的 Trace
 图，可以看到抽样序列呈现平稳的混合过程。（横坐标：采样步数
 Sample，纵坐标：有效观测量 Observable）</em></p>
 </div>
 <div data-align="center">
 <p><img src="figures/acf_p1_step0.6.png" alt="ACF p1 step 0.6" /> <br>
 <em>图 2：密度 <span
-class="math inline"><em>p</em><sub>1</sub></span>（步长 <span
-class="math inline"><em>σ</em> = 0.6</span>）的自相关函数 (ACF)
+class="math inline">p_1</span>（步长 <span
+class="math inline">\sigma=0.6</span>）的自相关函数 (ACF)
 衰减图，可以看到相关性随延迟步数呈快速下降。（横坐标：延迟步数
 Lag，纵坐标：自相关系数 ACF）</em></p>
 </div>
 <p><br></p>
 <p><strong>基于密度 <span
-class="math inline"><em>p</em><sub>2</sub></span> (游走步长 <span
-class="math inline"><em>σ</em> = 0.9</span>)：</strong> 对于密度 <span
-class="math inline"><em>p</em><sub>2</sub></span>，步长 <span
-class="math inline"><em>σ</em> = 0.9</span>
+class="math inline">p_2</span> (游走步长 <span
+class="math inline">\sigma=0.9</span>)：</strong> 对于密度 <span
+class="math inline">p_2</span>，步长 <span
+class="math inline">\sigma=0.9</span>
 表现出最优的自相关时间（<span
-class="math inline"><em>τ</em><sub><em>i</em><em>n</em><em>t</em></sub> ≈ 5.6</span>）。从
+class="math inline">\tau_{int} \approx 5.6</span>）。从
 Trace 图可以看出序列在均值附近高频振荡且混合充分；对应的 ACF
 图极快地衰减到接近 0 的水平，代表了非常理想的独立同分布 (i.i.d)
 近似。</p>
 <div data-align="center">
 <p><img src="figures/trace_p2_step0.9.png" alt="Trace p2 step 0.9" />
 <br> <em>图 3：密度 <span
-class="math inline"><em>p</em><sub>2</sub></span>（步长 <span
-class="math inline"><em>σ</em> = 0.9</span>）前 2000 步采样的 Trace
+class="math inline">p_2</span>（步长 <span
+class="math inline">\sigma=0.9</span>）前 2000 步采样的 Trace
 图，链波动均匀且收敛快。（横坐标：采样步数 Sample，纵坐标：有效观测量
 Observable）</em></p>
 </div>
 <div data-align="center">
 <p><img src="figures/acf_p2_step0.9.png" alt="ACF p2 step 0.9" /> <br>
 <em>图 4：密度 <span
-class="math inline"><em>p</em><sub>2</sub></span>（步长 <span
-class="math inline"><em>σ</em> = 0.9</span>）的自相关函数 (ACF)
+class="math inline">p_2</span>（步长 <span
+class="math inline">\sigma=0.9</span>）的自相关函数 (ACF)
 衰减图，可见 ACF 在 10 步以内基本降至零。（横坐标：延迟步数
 Lag，纵坐标：自相关系数 ACF）</em></p>
 </div>
 <h2 id="补充说明">补充说明</h2>
 <p>根据重要性采样 (Importance Sampling) 的基本原理，对于待求积分 <span
-class="math inline"><em>I</em> = ∫<em>f</em>(<em>x</em>, <em>y</em>)<em>d</em><em>x</em><em>d</em><em>y</em></span>，当我们引入符合某种已知分布的概率密度函数
-<span class="math inline"><em>p</em>(<em>x</em>, <em>y</em>)</span>
+class="math inline">I = \int f(x,y) dx dy</span>，当我们引入符合某种已知分布的概率密度函数
+<span class="math inline">p(x,y)</span>
 时，积分类式的期望值可等价改写为：</p>
-<p><span class="math display">$$
+<p><span class="math display">
 I = \int \frac{f(x,y)}{p(x,y)} p(x,y) dx dy = \mathbb{E}_{p}\left[
 \frac{f(x,y)}{p(x,y)} \right]
-$$</span></p>
+</span></p>
 <p>通过马尔可夫链蒙特卡洛 (MCMC) 方法从 <span
-class="math inline"><em>p</em>(<em>x</em>, <em>y</em>)</span>
+class="math inline">p(x,y)</span>
 中抽取一系列样本点 <span
-class="math inline">(<em>x</em><sub><em>i</em></sub>, <em>y</em><sub><em>i</em></sub>)</span>
+class="math inline">(x_i, y_i)</span>
 时，积分值即可通过下式进行蒙特卡洛估计：</p>
-<p><span class="math display">$$
+<p><span class="math display">
 I \approx \frac{1}{N} \sum_{i=1}^N \frac{f(x_i, y_i)}{p(x_i, y_i)}
-$$</span></p>
+</span></p>
 <p>而在本题情图下，被积函数的核心部分 <span
-class="math inline"><em>f</em>(<em>x</em>, <em>y</em>) = (2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup>−<em>x</em><sup>2</sup> − <em>y</em><sup>2</sup> + <em>x</em><em>y</em></sup></span>。</p>
+class="math inline">f(x,y) = (2 + x^2 + y^2)e^{-x^2 - y^2 + xy}</span>。</p>
 <p><strong>1. 基于密度 <span
-class="math inline"><em>p</em><sub>1</sub></span> 的抽样估算：</strong>
-已知概率密度函数 <span class="math inline">$p_1(x,y) = \frac{1}{Z_1}
-e^{-x^2 - y^2 + xy}$</span>。代入上述原理公式中，每次采样的有效观测量
+class="math inline">p_1</span> 的抽样估算：</strong>
+已知概率密度函数 <span class="math inline">p_1(x,y) = \frac{1}{Z_1}
+e^{-x^2 - y^2 + xy}</span>。代入上述原理公式中，每次采样的有效观测量
 <span
-class="math inline"><em>O</em><sub>1</sub>(<em>x</em>, <em>y</em>)</span>
+class="math inline">O_1(x,y)</span>
 为：</p>
-<p><span class="math display">$$
+<p><span class="math display">
 \frac{f(x,y)}{p_1(x,y)} = \frac{(2 + x^2 + y^2) e^{-x^2 - y^2 +
 xy}}{\frac{1}{Z_1} e^{-x^2 - y^2 + xy}} = Z_1 (2 + x^2 + y^2)
-$$</span></p>
+</span></p>
 <p>因此最终的估计等式提炼为：<span
-class="math inline"><em>I</em> = <em>Z</em><sub>1</sub>⟨2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>⟩<sub><em>p</em><sub>1</sub></sub></span>。</p>
+class="math inline">I = Z_1 \langle 2 + x^2 + y^2 \rangle_{p_1}</span>。</p>
 <p><strong>2. 基于密度 <span
-class="math inline"><em>p</em><sub>2</sub></span> 的抽样估算：</strong>
-同理，针对密度函数 <span class="math inline">$p_2(x,y) = \frac{1}{Z_2}
-e^{-x^2 - y^2}$</span> 进行变换，对应的有效观测量 <span
-class="math inline"><em>O</em><sub>2</sub>(<em>x</em>, <em>y</em>)</span>
+class="math inline">p_2</span> 的抽样估算：</strong>
+同理，针对密度函数 <span class="math inline">p_2(x,y) = \frac{1}{Z_2}
+e^{-x^2 - y^2}</span> 进行变换，对应的有效观测量 <span
+class="math inline">O_2(x,y)</span>
 为：</p>
-<p><span class="math display">$$
+<p><span class="math display">
 \frac{f(x,y)}{p_2(x,y)} = \frac{(2 + x^2 + y^2) e^{-x^2 - y^2 +
 xy}}{\frac{1}{Z_2} e^{-x^2 - y^2}} = Z_2 (2 + x^2 + y^2) e^{xy}
-$$</span></p>
+</span></p>
 <p>所以得到最终估计等式为：<span
-class="math inline"><em>I</em> = <em>Z</em><sub>2</sub>⟨(2 + <em>x</em><sup>2</sup> + <em>y</em><sup>2</sup>)<em>e</em><sup><em>x</em><em>y</em></sup>⟩<sub><em>p</em><sub>2</sub></sub></span>。</p>
+class="math inline">I = Z_2 \langle (2 + x^2 + y^2)e^{xy} \rangle_{p_2}</span>。</p>
 <h2 id="源码附录">源码附录</h2>
 <h3 id="c-sampler-srcmcmc_integral.cpp">C++ Sampler
 (src/mcmc_integral.cpp)</h3>
